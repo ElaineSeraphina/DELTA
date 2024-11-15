@@ -18,7 +18,7 @@ def load_config():
         return {
             "proxy_retry_limit": 5,
             "reload_interval": 60,
-            "max_concurrent_connections": 200  # Sesuaikan untuk lebih banyak worker
+            "max_concurrent_connections": 50
         }
     with open('config.json', 'r') as f:
         return json.load(f)
@@ -141,64 +141,55 @@ async def connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures):
             proxy_failures.append(socks5_proxy)
             logger.info(f"Proxy {socks5_proxy} telah dihapus", color="<orange>")
 
-# Fungsi untuk memasukkan proxy ke dalam queue
-async def enqueue_proxies(proxy_list, queue):
-    for proxy in proxy_list:
-        await queue.put(proxy)
-
-# Fungsi untuk memproses proxy dari queue
-async def process_proxy_from_queue(queue, user_id, semaphore, proxy_failures):
-    while not queue.empty():
-        socks5_proxy = await queue.get()
-        await connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures)
-        queue.task_done()
-
 # Fungsi untuk memuat ulang daftar proxy
 async def reload_proxy_list():
+    with open('local_proxies.txt', 'r') as file:
+        local_proxies = file.read().splitlines()
+    logger.info("Daftar proxy telah dimuat pertama kali.")
+    
     while True:
-        await asyncio.sleep(reload_interval)
+        await asyncio.sleep(reload_interval)  # Tunggu interval sebelum reload berikutnya
         with open('local_proxies.txt', 'r') as file:
             local_proxies = file.read().splitlines()
         logger.info("Daftar proxy telah dimuat ulang.")
         return local_proxies
 
 async def main():
+    # Cek pembaruan skrip dari GitHub
     auto_update_script()
+    
+    # Periksa kode aktivasi sebelum melanjutkan
     check_activation_code()
+    
     user_id = input("Masukkan user ID Anda: ")
 
-    semaphore = asyncio.Semaphore(max_concurrent_connections)
-    proxy_failures = []
+    # Load proxy pertama kali tanpa delay
+    with open('local_proxies.txt', 'r') as file:
+        local_proxies = file.read().splitlines()
+    logger.info("Daftar proxy pertama kali dimuat.")
+    
+    # Task queue untuk membagi beban
     queue = asyncio.Queue()
+    for proxy in local_proxies:
+        await queue.put(proxy)
+    
+    # Memulai task reload proxy secara berkala
+    proxy_list_task = asyncio.create_task(reload_proxy_list())
 
-    while True:
-        # Memuat ulang daftar proxy dan menambahkannya ke queue
-        with open('local_proxies.txt', 'r') as file:
-            local_proxies = file.read().splitlines()
-        logger.info("Daftar proxy telah dimuat ulang.")
+    semaphore = asyncio.Semaphore(max_concurrent_connections)  # Batasi koneksi bersamaan
+    proxy_failures = []
 
-        # Menambahkan proxy ke queue
-        await enqueue_proxies(local_proxies, queue)
+    tasks = []
+    for _ in range(len(local_proxies)):
+        task = asyncio.create_task(process_proxy(queue, user_id, semaphore, proxy_failures))
+        tasks.append(task)
 
-        # Menjalankan pekerja secara paralel untuk memproses proxy
-        tasks = []
-        for _ in range(10):  # Jumlah pekerja bisa disesuaikan
-            task = asyncio.create_task(process_proxy_from_queue(queue, user_id, semaphore, proxy_failures))
-            tasks.append(task)
+    await asyncio.gather(*tasks)
 
-        # Menunggu pekerja selesai
-        await asyncio.gather(*tasks)
-
-        # Menyimpan proxy yang berhasil
-        working_proxies = [proxy for proxy in local_proxies if proxy not in proxy_failures]
-        with open('data/successful_proxies.txt', 'w') as file:
-            file.write("\n".join(working_proxies))
-
-        if not working_proxies:
-            logger.info("Semua proxy gagal, menunggu untuk mencoba kembali...")
-        else:
-            logger.info(f"Proxy berhasil digunakan: {len(working_proxies)} proxy aktif.")
-        await asyncio.sleep(reload_interval)
+async def process_proxy(queue, user_id, semaphore, proxy_failures):
+    while not queue.empty():
+        socks5_proxy = await queue.get()
+        await connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures)
 
 if __name__ == "__main__":
     asyncio.run(main())
