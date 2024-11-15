@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import asyncio
 import random
 import ssl
@@ -13,21 +11,6 @@ from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 from subprocess import call
 
-# Warna teks
-white = "\033[97m"
-cyan = "\033[96m"
-red = "\033[91m"
-reset = "\033[0m"
-
-# Tampilan informasi
-print("")
-print(f"{white} ***********************************************{reset}")
-print(f"{cyan} Toolkit For{red} Lazy People{reset}")
-print(f"{cyan} Autor by{red} ElaineSeraphina{reset}")
-print(f"{cyan} Follow Me On Github:{red} @ElaineSeraphina{reset}")
-print(f"{cyan} Contact :{red} elaineseraphina.eth@gmail.com{reset}")
-print("")
-
 # Membaca konfigurasi dari file config.json
 def load_config():
     if not os.path.exists('config.json'):
@@ -39,6 +22,22 @@ def load_config():
         }
     with open('config.json', 'r') as f:
         return json.load(f)
+
+# Fungsi untuk menampilkan header
+def print_header():
+    os.system('clear')  # Membersihkan layar terminal
+    print(" ***********************************************")
+    print(" Toolkit For Lazy People")
+    print(" Author by ElaineSeraphina")
+    print(" Follow Me On Github: @ElaineSeraphina")
+    print(" Contact : elaineseraphina.eth@gmail.com")
+    print(" ***********************************************\n")
+
+# Task untuk memperbarui header setiap beberapa detik
+async def keep_header_updated(interval=10):
+    while True:
+        print_header()
+        await asyncio.sleep(interval)
 
 # Membuat folder data jika belum ada
 if not os.path.exists('data'):
@@ -172,6 +171,9 @@ async def reload_proxy_list():
         return local_proxies
 
 async def main():
+    # Task untuk menjaga header tetap di atas
+    asyncio.create_task(keep_header_updated())
+
     # Cek pembaruan skrip dari GitHub
     auto_update_script()
     
