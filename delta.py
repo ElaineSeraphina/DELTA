@@ -11,6 +11,41 @@ from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 from subprocess import call
 
+# Warna untuk tampilan terminal
+blue = '\e[0;34m'
+cyan = '\e[0;36m'
+green = '\e[0;34m'
+okegreen = '\033[92m'
+lightgreen = '\e[1;32m'
+white = '\e[1;37m'
+red = '\e[1;31m'
+yellow = '\e[1;33m'
+
+# Fungsi untuk clear layar
+def clear():
+    os.system('clear')
+
+# Menangani CTRL+C
+def ctrl_c():
+    clear()
+    print(f"{red}[#]> (Ctrl + C ) Detected, Trying To Exit ...")
+    time.sleep(1)
+    print(f"{yellow}[#]> Thank You For Using My Tools ...")
+    time.sleep(1)
+    print(f"{white}[#]> I'm Here ...")
+    input()
+    exit()
+
+# Menangani tampilan awal
+def welcome_screen():
+    clear()
+    print(f"{white} ***********************************************")
+    print(f"{cyan} Toolkit For{red} Lazy People")
+    print(f"{cyan} Author by{red} ElaineSeraphina")
+    print(f"{cyan} Follow Me On Github:{red} @ElaineSeraphina")
+    print(f"{cyan} Contact :{red} elaineseraphina.eth@gmail.com")
+    print(f"{white} ***********************************************")
+
 # Membaca konfigurasi dari file config.json
 def load_config():
     if not os.path.exists('config.json'):
@@ -37,7 +72,7 @@ user_agent = UserAgent(os='windows', platforms='pc', browsers='chrome')
 
 # Fungsi pembaruan otomatis dari GitHub
 def auto_update_script():
-    update_choice = input("\033[91mApakah Anda ingin mengunduh data terbaru dari GitHub? (Y/N):\033[0m ")
+    update_choice = input(f"{red}Apakah Anda ingin mengunduh data terbaru dari GitHub? (Y/N):{white} ")
     if update_choice.lower() == "y":
         logger.info("Memeriksa pembaruan skrip di GitHub...")
         
@@ -163,6 +198,7 @@ async def process_proxy_batch(proxy_batch, user_id, semaphore, proxy_failures):
     await asyncio.gather(*tasks)
 
 async def main():
+    welcome_screen()
     auto_update_script()
     check_activation_code()
     user_id = input("Masukkan user ID Anda: ")
