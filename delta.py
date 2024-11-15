@@ -11,41 +11,6 @@ from websockets_proxy import Proxy, proxy_connect
 from fake_useragent import UserAgent
 from subprocess import call
 
-# Warna untuk tampilan terminal
-blue = '\e[0;34m'
-cyan = '\e[0;36m'
-green = '\e[0;34m'
-okegreen = '\033[92m'
-lightgreen = '\e[1;32m'
-white = '\e[1;37m'
-red = '\e[1;31m'
-yellow = '\e[1;33m'
-
-# Fungsi untuk clear layar
-def clear():
-    os.system('clear')
-
-# Menangani CTRL+C
-def ctrl_c():
-    clear()
-    print(f"{red}[#]> (Ctrl + C ) Detected, Trying To Exit ...")
-    time.sleep(1)
-    print(f"{yellow}[#]> Thank You For Using My Tools ...")
-    time.sleep(1)
-    print(f"{white}[#]> I'm Here ...")
-    input()
-    exit()
-
-# Menangani tampilan awal
-def welcome_screen():
-    clear()
-    print(f"{white} ***********************************************")
-    print(f"{cyan} Toolkit For{red} Lazy People")
-    print(f"{cyan} Author by{red} ElaineSeraphina")
-    print(f"{cyan} Follow Me On Github:{red} @ElaineSeraphina")
-    print(f"{cyan} Contact :{red} elaineseraphina.eth@gmail.com")
-    print(f"{white} ***********************************************")
-
 # Membaca konfigurasi dari file config.json
 def load_config():
     if not os.path.exists('config.json'):
@@ -72,7 +37,7 @@ user_agent = UserAgent(os='windows', platforms='pc', browsers='chrome')
 
 # Fungsi pembaruan otomatis dari GitHub
 def auto_update_script():
-    update_choice = input(f"{red}Apakah Anda ingin mengunduh data terbaru dari GitHub? (Y/N):{white} ")
+    update_choice = input("\033[91mApakah Anda ingin mengunduh data terbaru dari GitHub? (Y/N):\033[0m ")
     if update_choice.lower() == "y":
         logger.info("Memeriksa pembaruan skrip di GitHub...")
         
@@ -176,10 +141,17 @@ async def connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures):
             proxy_failures.append(socks5_proxy)
             logger.info(f"Proxy {socks5_proxy} telah dihapus", color="<orange>")
 
-# Fungsi untuk membagi proxy dalam batch
-def batch_proxies(proxy_list, batch_size):
-    for i in range(0, len(proxy_list), batch_size):
-        yield proxy_list[i:i + batch_size]
+# Fungsi untuk memasukkan proxy ke dalam queue
+async def enqueue_proxies(proxy_list, queue):
+    for proxy in proxy_list:
+        await queue.put(proxy)
+
+# Fungsi untuk memproses proxy dari queue
+async def process_proxy_from_queue(queue, user_id, semaphore, proxy_failures):
+    while not queue.empty():
+        socks5_proxy = await queue.get()
+        await connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures)
+        queue.task_done()
 
 # Fungsi untuk memuat ulang daftar proxy
 async def reload_proxy_list():
@@ -190,30 +162,34 @@ async def reload_proxy_list():
         logger.info("Daftar proxy telah dimuat ulang.")
         return local_proxies
 
-async def process_proxy_batch(proxy_batch, user_id, semaphore, proxy_failures):
-    tasks = []
-    for socks5_proxy in proxy_batch:
-        task = asyncio.create_task(connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures))
-        tasks.append(task)
-    await asyncio.gather(*tasks)
-
 async def main():
-    welcome_screen()
     auto_update_script()
     check_activation_code()
     user_id = input("Masukkan user ID Anda: ")
 
-    proxy_list_task = asyncio.create_task(reload_proxy_list())
     semaphore = asyncio.Semaphore(max_concurrent_connections)
     proxy_failures = []
     queue = asyncio.Queue()
 
     while True:
-        local_proxies = await proxy_list_task
-        batch_size = 1000  # Sesuaikan ukuran batch sesuai kapasitas
-        for proxy_batch in batch_proxies(local_proxies, batch_size):
-            await process_proxy_batch(proxy_batch, user_id, semaphore, proxy_failures)
+        # Memuat ulang daftar proxy dan menambahkannya ke queue
+        with open('local_proxies.txt', 'r') as file:
+            local_proxies = file.read().splitlines()
+        logger.info("Daftar proxy telah dimuat ulang.")
 
+        # Menambahkan proxy ke queue
+        await enqueue_proxies(local_proxies, queue)
+
+        # Menjalankan pekerja secara paralel untuk memproses proxy
+        tasks = []
+        for _ in range(10):  # Jumlah pekerja bisa disesuaikan
+            task = asyncio.create_task(process_proxy_from_queue(queue, user_id, semaphore, proxy_failures))
+            tasks.append(task)
+
+        # Menunggu pekerja selesai
+        await asyncio.gather(*tasks)
+
+        # Menyimpan proxy yang berhasil
         working_proxies = [proxy for proxy in local_proxies if proxy not in proxy_failures]
         with open('data/successful_proxies.txt', 'w') as file:
             file.write("\n".join(working_proxies))
