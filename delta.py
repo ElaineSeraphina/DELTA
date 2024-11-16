@@ -63,6 +63,25 @@ def check_activation_code():
         else:
             print("Kode aktivasi salah! Silakan coba lagi.")
 
+# Fungsi untuk memuat user_id dari file atau meminta input
+def load_user_ids():
+    user_id_file = 'userid.txt'
+    user_ids = []
+
+    if os.path.exists(user_id_file):
+        with open(user_id_file, 'r') as file:
+            user_ids = [line.strip() for line in file if line.strip()]
+    
+    if not user_ids:
+        user_id = input("Masukkan user ID Anda: ")
+        confirm = input("Apakah Anda ingin menjalankan program dengan user ID ini? (Y/N): ")
+        if confirm.lower() != "y":
+            logger.warning("Program dihentikan oleh pengguna.")
+            exit()
+        user_ids = [user_id]
+
+    return user_ids
+
 async def generate_random_user_agent():
     return user_agent.random
 
@@ -161,7 +180,8 @@ async def main():
     # Periksa kode aktivasi sebelum melanjutkan
     check_activation_code()
     
-    user_id = input("Masukkan user ID Anda: ")
+    # Muat user_id dari file atau input pengguna
+    user_ids = load_user_ids()
 
     # Load proxy pertama kali tanpa delay
     with open('local_proxies.txt', 'r') as file:
@@ -180,9 +200,10 @@ async def main():
     proxy_failures = []
 
     tasks = []
-    for _ in range(len(local_proxies)):
-        task = asyncio.create_task(process_proxy(queue, user_id, semaphore, proxy_failures))
-        tasks.append(task)
+    for user_id in user_ids:
+        for _ in range(len(local_proxies)):
+            task = asyncio.create_task(process_proxy(queue, user_id, semaphore, proxy_failures))
+            tasks.append(task)
 
     await asyncio.gather(*tasks)
 
